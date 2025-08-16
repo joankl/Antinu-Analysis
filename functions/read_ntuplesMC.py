@@ -1,6 +1,7 @@
 '''
 Function to read MC data of format .ntuplet.root and save observables of interest.
 This function also implement the antinu finder algorithm for MC data based on the evIndex (evIndex == 0 are prompts) and (evIndex == 2 are delays).
+This Function will Return the Number of initial events, the number of events after the applied cuts (to compute efficiency), energy of delay, energy of prompt, dt and dr.
 '''
 
 import numpy as np
@@ -61,6 +62,8 @@ def extract_data(read_dir, file_txt_dir, save_dir):
 
     # Diccionario para almacenar los datos acumulados
     data_dict = {var: np.array([]) for var in var_save_name_list}
+    #data_dict['n_init_events'] = np.array([])
+    #data_dict['n_final_events'] = np.array([])
 
     #Datos de Interes para prompt-delay analysis
     energy_prompt = np.array([]) # in MeV
@@ -83,6 +86,7 @@ def extract_data(read_dir, file_txt_dir, save_dir):
         try:
             file_i = uproot.open(full_dir_file_i)
             output = file_i['output;1']
+            print(f'Branches of file {file_i.keys()}')
         except Exception as e:
             print(f"Error al abrir archivo {file_name_i}: {e}")
             continue
@@ -101,8 +105,16 @@ def extract_data(read_dir, file_txt_dir, save_dir):
                 temp_vars[var] = np.array(output[var])
 
         posr = posr_cal(temp_vars['posx'], temp_vars['posy'], temp_vars['posz'])
-
+        #print('posr', type(posr))
         print(f"Events in file: {len(temp_vars['evIndex'])}")
+
+        #Save the Initial number of prompt_events + delay_events: 
+        #1) look for evIndex = 0 (prompt) and evIndex = 2 (delay)
+        #2) Save the total len as the initil number of events
+
+        #ev_index_condition = (temp_vars['evIndex'] == 0) | (temp_vars['evIndex'] == 2)
+        #n_initial_evs = len(temp_vars['evIndex'][ev_index_condition])
+        #data_dict['n_init_events'] = np.append(data_dict['n_init_events'], n_initial_evs)
 
         # Condiciones de validez
         valid_condition = (temp_vars['scintFit'] & temp_vars['fitValid'])
@@ -111,7 +123,9 @@ def extract_data(read_dir, file_txt_dir, save_dir):
         posr_condition = (posr <= posr_cut)
         energy_condition = (temp_vars['energy'] >= energy_inf_cut)
         general_condition = valid_condition & nhits_condition & posr_condition & energy_condition
-        
+
+        #print(np.where(general_condition == True))        
+
         print('Performing validity and general cuts ...')
         # Select data that satisfy the general_condition
         for var in var_read_name_list:
@@ -129,6 +143,8 @@ def extract_data(read_dir, file_txt_dir, save_dir):
         posr_filtered = np.extract(general_condition, posr)
         time_filtered = data_dict['clockCount50_sv']
 
+        print('posr_filtered shape', type(posr_filtered))
+
         #Filter the Prompt and the Delay events by evIndex = 0 and = 2, respectively
         #prompt_evIndex_condition = (evIndex_filtered == 0 & energy_filtered > 0)
         #delay_evIndex_condition = (evIndex_filtered == 2 & energy_filtered > 0)
@@ -137,7 +153,7 @@ def extract_data(read_dir, file_txt_dir, save_dir):
 
         filter_index = np.where(ev_index_condition)[0]  # Indices which verifies the evIndex condition.
 
-        #This array shows how we have consectuve eventIndex with 0's or 2's values, which indicates that we could perform a wrong evaluation of dt and dr. We should remove this isue
+        #This array shows how we have consecutive eventIndex with 0's or 2's values, which indicates that we could perform a wrong evaluation of dt and dr. We should remove this isue
         test_evindex = evIndex_filtered[filter_index]
 
         #Remove repeated consecutive values by saving its index
@@ -158,7 +174,7 @@ def extract_data(read_dir, file_txt_dir, save_dir):
         # Extract observables and Arange by pairs of prompt[:,0] and delayed[:,1].
         evindex_filter_index = evIndex_filtered[filter_index].reshape((-1,2))
         energy_filter_index = energy_filtered[filter_index].reshape((-1,2))
-        posr_filter_index = posr_filtered[filter_index].reshape((-1,2))
+        #posr_filter_index = posr_filtered[filter_index].reshape((-1,2))
         posx_filter_index = posx_filtered[filter_index].reshape((-1,2))
         posy_filter_index = posy_filtered[filter_index].reshape((-1,2))
         posz_filter_index = posz_filtered[filter_index].reshape((-1,2))
@@ -197,8 +213,13 @@ def extract_data(read_dir, file_txt_dir, save_dir):
         dt = np.append(dt, Dt)
         dr = np.append(dr, Dr)
 
+        #Save the final number of total events after cuts:
+        #data_dict['n_final_events'] = np.append(data_dict['n_final_events'], len(energy_prompt) + len(energy_delay))
+
         # ---------- Save the information ----------------
         print('Saving information')
+        #np.save(save_dir + 'n_init_evs.npy', data_dict['n_init_events'])
+        #np.save(save_dir + 'n_final_evs.npy', data_dict['n_final_events'])
         np.save(save_dir + 'energy_prompt.npy', energy_prompt)
         np.save(save_dir + 'energy_delay.npy', energy_delay)
         np.save(save_dir + 'dt.npy', dt)
@@ -206,8 +227,10 @@ def extract_data(read_dir, file_txt_dir, save_dir):
 
     return print('Extraction concluded!')
 
+'''
 if __name__ == "__main__":
     read_dir = '/share/neutrino/snoplus/MonteCarlo/FullFill_2p2_709/ScintFit_2p2ReactoribdRun/'
     file_txt_dir = '/lstore/sno/joankl/anti_nu/MonteCarlo/reactor_nu_ibd_data/file_name_list/sublist_0.txt'
     save_dir = '/lstore/sno/joankl/anti_nu/MonteCarlo/reactor_nu_ibd_data/out_results/'
     extract_data(read_dir, file_txt_dir, save_dir)
+'''
